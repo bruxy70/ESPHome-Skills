@@ -38,7 +38,6 @@ Device-specific variables that can be overridden per device. Defined at the top 
 substitutions:
   device_name: display-kitchen
   friendly_name: Kitchen Display
-  ip: 192.168.1.100
   # Hardware-specific
   display_width: "800"
   display_height: "480"
@@ -51,17 +50,7 @@ Packages allow splitting ESPHome configs into reusable fragments via `!include`.
 ```yaml
 # In main config:
 packages:
-  wifi: !include common/wifi.yaml
-  api: !include common/api.yaml
   base: !include common/base.yaml
-
-# common/wifi.yaml:
-wifi:
-  ssid: !secret wifi_ssid
-  password: !secret wifi_password
-  ap:
-    ssid: "${device_name} Fallback"
-```
 
 ### YAML Structure Order
 
