@@ -923,11 +923,14 @@ For `align_to` (relative to sibling): prefix with `OUT_` e.g. `OUT_TOP_MID`, `OU
 
 ### Meter/Gauge Design Principles
 - **Semicircle gauges (180deg)** are the most readable for dashboard tiles
-- **Use the crop pattern:** meter + black arc overlay to clean up the center
-- **Scale labels** at min/max positions help users interpret values without counting ticks
-- **Color-coded arcs** for ranges (red=danger, green=normal) provide instant status
+- **Use the crop pattern:** meter + black arc overlay to clean up the center, then center cap (small circle) to cover needle hub
+- **tick_style gradient** (preferred over arc indicators): dense ticks with `local: true` gradient fill look dramatically more professional than flat-color arcs. Use `major:` ticks for scale reference marks
+- **Needle visibility**: `r_mod` must be POSITIVE (e.g. +5) so the needle extends past the tick edge. Negative `r_mod` with a crop arc makes the needle nearly invisible
+- **Min/max labels**: position BELOW the diameter line (`y = meter_y_offset + gap`). Compute positions from meter geometry, don't guess pixel offsets
+- **Contrast**: all text on `0x1E1E1E` card background must be at least `0x909090` (~4.5:1). Lower contrast text is unreadable at arm's length on small displays
+- **Scrolling**: every `obj` container needs BOTH `scrollbar_mode: "off"` AND `scrollable: false`. The scrollbar property alone only hides the visual; content still scrolls on touch
 - **Needle + numeric label** together -- needle for trend, label for precision
-- **Icon in corner** (top-left) identifies what the gauge measures
+- **Icon above gauge** identifies what the gauge measures; gray when idle, accent color when active
 
 ### Interactive Element Guidelines
 - **Buttons:** Minimum 48x48px for reliable touch; use `buttonmatrix` for groups
@@ -1265,12 +1268,12 @@ Gauge with scales, needles, tick marks, and arc indicators.
         width: 2               # Tick width in pixels
         length: 10             # Tick length in pixels
         color: 0xFFFFFF
-      major_ticks:
-        stride: 5              # Every Nth tick is major
-        width: 3
-        length: 15
-        color: 0xFFFFFF
-        label_gap: 10          # Gap between tick and label
+        major:                 # Major ticks (nested inside ticks:, NOT a sibling)
+          stride: 5            # Every Nth tick is major
+          width: 3
+          length: 15
+          color: 0xFFFFFF
+          label_gap: 10        # Gap between tick and label
       indicators:
         - line:                # Needle indicator
             id: needle_id
@@ -1672,63 +1675,139 @@ lvgl:
 
 ## Common LVGL Patterns
 
-### Semicircle Gauge (Meter + Arc Crop + Labels)
-A common pattern for dashboards: meter with 180deg arc, overlaid black arc to hide center, with value labels.
+### Semicircle Gauge (tick_style gradient + Crop Arc + Center Cap)
+Professional gauge pattern using tick_style gradient fill, major tick scale marks, thin needle, and center cap.
+
+Widget tree order: `icon → name label → meter → crop arc → center cap → min/max labels → value label → unit label`
 
 ```yaml
 - obj:
-    styles: widget_style
+    width: 150
+    height: 120
+    bg_opa: TRANSP
+    border_width: 0
+    pad_all: 0
+    scrollbar_mode: "off"
+    scrollable: false          # BOTH required to prevent touch scrolling
     widgets:
+      - image:
+          src: my_icon
+          align: TOP_MID
+          y: 0
+          image_recolor: 0xF0E000
+          image_recolor_opa: 100%
+      - label:
+          text: "GAUGE"
+          text_font: MONTSERRAT_12
+          text_color: 0xF0E000
+          bg_opa: TRANSP
+          align: TOP_MID
+          y: 26
       - meter:
-          styles: meter_style
+          width: 130             # or 105 for small gauges
+          height: 130
+          align: center
+          y: 40                  # offset from parent center
+          bg_opa: TRANSP
+          border_width: 0
+          text_font: MONTSERRAT_10
           scales:
             angle_range: 180
             range_from: 0
-            range_to: 100
+            range_to: 10
             ticks:
-              count: 11
-              length: 20
+              count: 41          # Dense ticks for smooth gradient
+              width: 2
+              length: 16
+              color: 0x1E1E1E    # Invisible base (matches card bg)
+              major:
+                stride: 4
+                width: 2
+                length: 20       # Longer = visible scale marks
+                color: 0x333333
             indicators:
+              - tick_style:
+                  color_start: 0xDARK
+                  color_end: 0xBRIGHT
+                  start_value: 0
+                  end_value: 10
+                  local: true    # REQUIRED for proper gradient
               - line:
                   id: my_needle
-                  width: 8
+                  width: 3
                   color: 0xFFFFFF
-                  r_mod: 12
+                  r_mod: 5       # POSITIVE: extends past ticks for visibility
                   value: 0
-              - arc:
-                  color: 0xFF0000
-                  r_mod: 10
-                  width: 20
-                  start_value: 0
-                  end_value: 50
-              - arc:
-                  color: 0x00FF00
-                  r_mod: 10
-                  width: 20
-                  start_value: 50
-                  end_value: 100
-      - arc:                    # Black arc to crop meter center
-          styles: crop_indicator
+      - arc:                     # Crop arc hides meter center
+          width: 84              # or 66 for small
+          height: 84
+          align: center
+          y: 40                  # Must match meter y
           start_angle: 0
           end_angle: 360
+          border_width: 0
+          arc_color: 0x1E1E1E
+          arc_width: 100
           indicator:
             arc_width: 100
-            arc_color: 0x000000
-      - label:
-          styles: min_font_style
+            arc_color: 0x1E1E1E
+      - obj:                     # Center cap covers needle hub
+          width: 10              # or 8 for small
+          height: 10
+          align: center
+          y: 40                  # Must match meter y
+          bg_color: 0x333333
+          bg_opa: COVER
+          border_width: 0
+          radius: 5
+      - label:                   # Min endpoint
           text: "0"
-      - label:
-          styles: max_font_style
-          text: "100"
-      - label:
-          styles: value_font_style
+          text_font: MONTSERRAT_10
+          text_color: 0x909090   # Must be legible on card bg
+          bg_opa: TRANSP
+          align: center
+          y: 46                  # = meter_y(40) + 6px gap below diameter
+          x: -58                 # = -(radius(65) - ~7)
+      - label:                   # Max endpoint
+          text: "10"
+          text_font: MONTSERRAT_10
+          text_color: 0x909090
+          bg_opa: TRANSP
+          align: center
+          y: 46
+          x: 58
+      - label:                   # Value
           id: my_value_label
-      - image:
-          src: my_icon
-          id: my_img
-          align: top_left
-          image_recolor: 0xF0E000
-          image_recolor_opa: 100%
+          text_font: MONTSERRAT_22
+          text_color: 0xFFFFFF
+          bg_opa: TRANSP
+          align: center
+          y: 14
+          text: "0.0"
+      - label:                   # Unit
+          text_font: MONTSERRAT_12
+          text_color: 0xB0B0B0
+          bg_opa: TRANSP
+          align: center
+          y: 32
+          text: "kW"
+```
+
+For bidirectional gauges (e.g. grid power), use two `tick_style` indicators split at zero:
+```yaml
+indicators:
+  - tick_style:                  # Negative half (red → dark)
+      color_start: 0xFF3000
+      color_end: 0x1E1E1E
+      start_value: -10
+      end_value: 0
+      local: true
+  - tick_style:                  # Positive half (dark → green)
+      color_start: 0x1E1E1E
+      color_end: 0x00E000
+      start_value: 0
+      end_value: 10
+      local: true
 ```
 
 ### Wind Compass (360deg Meter)
@@ -2002,7 +2081,7 @@ When implementing a page or feature, verify:
 7. **Flex layout** is preferred for responsive layouts that adapt to content.
 8. **Use `top_layer`** for persistent navigation buttons and status indicators.
 9. **Home Assistant actions** require explicit enablement per device in HA settings.
-10. **Use `scrollbar_mode: "off"`** on container objects to prevent unwanted scroll behavior.
+10. **Use `scrollbar_mode: "off"` AND `scrollable: false`** on every container object. `scrollbar_mode` only hides the visual scrollbar; without `scrollable: false`, content still scrolls on touch drag.
 11. **For floats in formatted text**, use `args: ['x']` or `args: ['x/1000']` -- these are C++ expressions.
 12. **Lambda text returns** must return `std::string` -- use `return x.c_str();` for text_sensor values or `return std::string("text");` for string literals.
 13. **Use `if_nan`** in text format to handle NaN/Inf sensor values gracefully.
